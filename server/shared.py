@@ -23,14 +23,14 @@
 # SOFTWARE.
 # ==============================================================================
 
-import getopt
-import sys
 from typing import Optional, Set, List
 
-from dimples.utils import Path
+from dimples.utils import SysArgvParser
+from dimples.utils import Log
 from dimples.utils import Singleton
+from dimples.utils import Path
 from dimples.utils import Config
-from dimples.common.compat import CommonLoader
+from dimples.common.compat import LibraryLoader
 
 
 @Singleton
@@ -45,7 +45,7 @@ class GlobalVariable:
         self.__allowed_size = None  # default is 16 MB
         self.__secrets: Optional[List[str]] = None
         # load extensions
-        CommonLoader().run()
+        LibraryLoader().run()
 
     @property
     def config(self) -> Config:
@@ -107,7 +107,7 @@ class GlobalVariable:
     def __get_set(self, section: str, option: str) -> Set[str]:
         result = set()
         value = self.config.get_string(section=section, option=option)
-        assert value is not None, 'string value not found: section=%s, option=%s' % (section, option)
+        assert value is not None, f'string value not found: section={section}, option={option}'
         array = value.split(',')
         for item in array:
             string = item.strip()
@@ -118,7 +118,7 @@ class GlobalVariable:
     def __get_list(self, section: str, option: str) -> List[str]:
         result = []
         value = self.config.get_string(section=section, option=option)
-        assert value is not None, 'string value not found: section=%s, option=%s' % (section, option)
+        assert value is not None, f'string value not found: section={section}, option={option}'
         array = value.split(',')
         for item in array:
             string = item.strip()
@@ -146,49 +146,23 @@ class GlobalVariable:
         return secrets
 
 
-def show_help(cmd: str, app_name: str, default_config: str):
-    print('')
-    print('    %s' % app_name)
-    print('')
-    print('usages:')
-    print('    %s [--config=<FILE>]' % cmd)
-    print('    %s [-h|--help]' % cmd)
-    print('')
-    print('optional arguments:')
-    print('    --config        config file path (default: "%s")' % default_config)
-    print('    --help, -h      show this help message and exit')
-    print('')
-
-
-async def create_config(app_name: str, default_config: str) -> Config:
+async def create_config(sys_argv: SysArgvParser, default_config: str) -> Optional[Config]:
     """ Step 1: load config """
-    cmd = sys.argv[0]
-    try:
-        opts, args = getopt.getopt(args=sys.argv[1:],
-                                   shortopts='hf:',
-                                   longopts=['help', 'config='])
-    except getopt.GetoptError:
-        show_help(cmd=cmd, app_name=app_name, default_config=default_config)
-        sys.exit(1)
-    # check options
-    ini_file = None
-    for opt, arg in opts:
-        if opt == '--config':
-            ini_file = arg
-        else:
-            show_help(cmd=cmd, app_name=app_name, default_config=default_config)
-            sys.exit(0)
-    # check config filepath
+    #
+    #  get INI file
+    #
+    ini_file = sys_argv.get_opt(opt='config')
     if ini_file is None:
         ini_file = default_config
     if not await Path.exists(path=ini_file):
-        show_help(cmd=cmd, app_name=app_name, default_config=default_config)
-        print('')
-        print('!!! config file not exists: %s' % ini_file)
-        print('')
-        sys.exit(0)
-    # load config from file
+        Log.error('!!! config file not exists: %s', ini_file)
+        return None
+    shared = GlobalVariable()
+    #
+    #  load config
+    #
     config = Config()
     await config.load(path=ini_file)
-    print('>>> config loaded: %s => %s' % (ini_file, config))
+    Log.warning('>>> config loaded: %s => %s', ini_file, config)
+    await shared.prepare(config=config)
     return config

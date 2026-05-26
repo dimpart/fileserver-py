@@ -31,7 +31,12 @@
     DIM network supporting service
 """
 
-from dimples.utils import Log, Runner
+import sys
+
+from dimples.utils import SysArgvParser
+from dimples.utils import init_logger
+from dimples.utils import LogLevel
+from dimples.utils import Runner
 from dimples.utils import Path
 
 path = Path.abs(path=__file__)
@@ -46,22 +51,56 @@ from server.handler import app
 
 
 #
-# show logs
+#  show logs
 #
-Log.LEVEL = Log.DEVELOP
+LOG_LEVEL = LogLevel.DEVELOP
+LOGGER_NAME = 'ftp'
 
+APP_NAME = 'File Server'
 
 DEFAULT_CONFIG = '/etc/dim/ftp.ini'
 
 
+def show_help():
+    cmd = sys.argv[0]
+    print('')
+    print('    %s' % APP_NAME)
+    print('')
+    print('usages:')
+    print('    %s [--config=<FILE>]' % cmd)
+    print('    %s [-h|--help]' % cmd)
+    print('')
+    print('optional arguments:')
+    print('    --config        config file path (default: "%s")' % DEFAULT_CONFIG)
+    print('    --help, -h      show this help message and exit')
+    print('')
+
+
 async def async_main():
-    # create global variable
-    shared = GlobalVariable()
-    config = await create_config(app_name='File Server', default_config=DEFAULT_CONFIG)
-    await shared.prepare(config=config)
+    #
+    #  parse cmd parameters
+    #
+    sys_argv = SysArgvParser.parse(shortopts='hf:ld:',
+                                   longopts=['help', 'config=', 'log-location', 'log-dir='])
+    if sys_argv is None:
+        show_help()
+        sys.exit(1)
+    #
+    #  init logger
+    #
+    show_location = sys_argv.has_opt(opt='log-location')
+    init_logger(name=LOGGER_NAME, level=LOG_LEVEL, show_location=show_location)
+    #
+    #  create config
+    #
+    config = await create_config(sys_argv=sys_argv, default_config=DEFAULT_CONFIG)
+    if config is None:
+        show_help()
+        sys.exit(1)
     #
     #  Start cleaner
     #
+    shared = GlobalVariable()
     cleaner = FileCleaner()
     cleaner.root = shared.upload_directory
     #
